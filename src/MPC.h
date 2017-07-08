@@ -17,4 +17,6 @@ class MPC {
   vector<double> Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs);
 };
 
+extern const double Lf;
+
 #endif /* MPC_H */

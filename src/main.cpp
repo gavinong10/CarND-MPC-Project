@@ -12,6 +12,8 @@
 // for convenience
 using json = nlohmann::json;
 
+int POLYDEGREE = 3;
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -91,15 +93,71 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          delta *= -1.0; // convert as per World->Unity conventions
 
+          // Print out the points that we will be fitting to
+          std::cout << "ptsx: " << endl;
+          for (double ptx : ptsx) {
+            std:: cout << ptx << ", " << std::endl;
+          }
+          std::cout << "\n" << endl;
+
+          std::cout << "ptsy: " << endl;
+          for (double pty : ptsy) {
+            std:: cout << pty << ", " << std::endl;
+          }
+          std::cout << "\n" << endl;
+
+          std::cout << "px: " << px << "\n" << std::endl;
+          std::cout << "py: " << py << "\n" << std::endl;
+          std::cout << "psi: " << psi << "\n" << std::endl;
+          std::cout << "v: " << v << "\n" << std::endl;
+
+          // Transform telemetry to car coordinate frame
+          size_t num_pts = ptsx.size();
+          Eigen::VectorXd car_ptsx = Eigen::VectorXd(num_pts);
+          Eigen::VectorXd car_ptsy = Eigen::VectorXd(num_pts);
+          for(size_t i=0; i<num_pts; i++) {
+            car_ptsx(i) =  (ptsx[i]-px)*cos(psi) + (ptsy[i]-py)*sin(psi);
+            car_ptsy(i) = -(ptsx[i]-px)*sin(psi) + (ptsy[i]-py)*cos(psi);
+          }
+
+          // Fit a polynomial to the points representing the ideal path the vehicle should follow.
+          auto coeffs = polyfit(car_ptsx, car_ptsy, POLYDEGREE);
+
+          // Calculate the cross track error
+
+          // In car's coordinate system, it is at (0,0)
+          // The cross track error needs to be calculated at a point in time
+          // caused by the latency effect
+
+          // Update state accounding for latency
+          double v_ms = v * 0.44704; // convert from mph to m/s
+          double dt_latency = 0.1; // in seconds;
+          double delta_psi =  v_ms*delta/Lf*dt_latency;
+          // Use delta_psi/2 to account for fact that psi a change of angle across dt (non-constant)
+          double px_car_latency = v_ms*cos(delta_psi/2)*dt_latency;
+          double py_car_latency = v_ms*sin(delta_psi/2)*dt_latency;
+
+          // Now we can evaluate cte
+          double cte = polyeval(coeffs, px_car_latency) - py_car_latency;
+          std::cout << "cte: " << cte << "\n" << std::endl;
+
+          // Calculate orientation error
+          // We need to find the derivative of the polyfit function and get it's psi value transformed back.
+          double dpy = coeffs[1] + 2*coeffs[2]*px_car_latency + 3*coeffs[3]*px_car_latency*px_car_latency;
+          double ref_psi = atan(dpy) + psi;
+          double epsi = psi - ref_psi; // i.e. epsi = -atan(dpy)
+          
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          double steer_value = 0;
+          double throttle_value = 0.01;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -124,9 +182,28 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
+          for(size_t i=0; i<num_pts; i++) {
+            next_x_vals.push_back(car_ptsx(i));
+            next_y_vals.push_back(car_ptsy(i));
+          }
+
+          std::cout << "next_x_vals: " << endl;
+          for (double next_x_val : next_x_vals) {
+            std:: cout << next_x_val << ", " << std::endl;
+          }
+          std::cout << "\n" << endl;
+
+          std::cout << "next_y_vals: " << endl;
+          for (double next_y_val : next_y_vals) {
+            std:: cout << next_y_val << ", " << std::endl;
+          }
+          std::cout << "\n" << endl;
+
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
+
+          
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
