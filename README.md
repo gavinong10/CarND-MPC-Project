@@ -73,7 +73,7 @@ performing these calculations to find the state vector, t = 0, which follows tha
 x(t) = y(t) = psi(t) = 0.
 
 ### Video
-[link YouTube video to simulation using developed MPC](https://youtu.be/o9TktTYaSOI)
+[YouTube video to simulation using developed MPC](https://youtu.be/o9TktTYaSOI)
 
 ---
 
