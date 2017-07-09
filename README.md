@@ -1,6 +1,80 @@
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
+## Write Up
+
+### The Model
+The model that was implemented is as follows:
+State consisted of
+* x - The position along the direction of the car's forward orientation where x = 0 is the position of the car at the present frame of reference (i.e. t = 0)
+* y - The position orthogonal to x, whereby positive values are in the direction to the left of the vehicle.
+* psi - The orientation of the vehicle with reference to the direction at time = 0
+* v - The current velocity of the vehicle in the direction of psi
+* cte - i.e. Cross Track Error. This is the shortest distance directly to the path that can be drawn; represents the lateral error of vehicle position.
+* e_psi - The error of psi - the error of the angle of the vehicle compared to the path.
+
+Actuators consist of:
+* delta - An input indicating the magnitude of steering [-25deg, 25deg]. Expressed in radian.
+* a - An input indicating the magnitude of acceleration [-1, 1]
+
+Update equations are defined as follows:
+x(t+1) = x(t) + v * cos(psi) * dt
+y(t+1) = y(t) + v * sin(psi) * dt
+psi(t+1) = psi(t) + v / Lf * delta(t) * dt (where Lf is the distance from vehicle center to front axle)
+cte(t+1) = cte(t) + v * sin(psi) * dt (assumes that dt is small enough so that cte is unaffected by change in path)
+e_psi(t+1) = e_psi(t) + v / Lf * delta(t) * dt (assumes that dt is small enough so that e_psi is unaffected by change in path)
+
+### Timestep Length and Elapsed Duration (N & dt)
+As an intuitive first estimate, N & dt were chosen to be 50 and 0.05 respectively.
+This was done because this yields a prediction horizon of 2.5 seconds, which seemed like
+a reasonable reaction time for driving from a human perspective.
+
+In practice, running with N = 50 proved to be far too computationally intensive - the car
+would veer off course before corrective calculations/actuator updates were invoked. Hence,
+N was scaled way back to be 10 and dt as 0.2. With these values, updates were occurring at
+an acceptable pace, whereby a new calculation would be performed before the 'cliff' of the
+prediction horizon. However, having 2 seconds of runway (at 20 mph which was the reference 
+speed that was set) led to trajectories that were too smooth and tended to cut corners. Reducing
+the scaling factor of the delta and ddelta cost penalties did not sufficiently correct the issue; 
+instead, the resolution was to reduce the prediction horizon so that more emphasis on trajectory 
+control was placed on following the path immediately in front of the car.
+
+Hence, N = 7 and dt = 0.1. 
+
+### Polynomial Fitting and MPC Preprocessing
+The polynomial was fit to the ptsx and ptsy coordinates after transforming them to the 
+coordinate system of the car. This way, it is easy to plan a trajectory which also 
+follows the same coordinate system of the car.
+
+A 3rd degree polynomial was chosen to sufficiently model curves and inflections on the road 
+in the prediction horizon.
+
+### Model Predictive Control with Latency
+Latency manifests itself as actuators performing actions at a time subsequent to an observation occurring.
+
+For example, a car may be at point (0, 0) when it makes an observation about the world. However, after a 
+latency of x seconds, the car may find itself at a point (1, 1), for example. 
+
+The way latency was dealt with here was as follows: given the current position, orientation, velocity and 
+steering magnitude, it is possible to approximate where the car will be after dt_latency seconds. With that position, 
+cte and e_psi can be calculated to setup a close-to-reality representation of the optimization problem for 
+actuator inputs delta and a. 
+
+The equations to calculate this new state after accounting for latency is as follows:
+
+* psi(t + latency) = psi(t) + v * delta / Lf * dt_latency; 
+* x(t + latency) = x(t) + v * cos((psi(t) + psi(t + latency))/2) * dt_latency;
+* y(t + latency) = y(t) + v * sin((psi(t) + psi(t + latency))/2) * dt_latency;
+
+Note the value "(psi(t) + psi(t + latency))/2" in the trig functions. This is 
+is actually an approximation of the effect of the car turning and is thus an 
+average of the angle before/after dt_latency elapses. Also, given that we are 
+performing these calculations to find the state vector, t = 0, which follows that 
+x(t) = y(t) = psi(t) = 0.
+
+### Video
+[link YouTube video to simulation using developed MPC](https://youtu.be/o9TktTYaSOI)
+
 ---
 
 ## Dependencies
